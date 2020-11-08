@@ -21,10 +21,8 @@ class Interpreter {
     line match {
       case l @ LineAST(0, _, _) => problem(l.pos, "zero is not a valid line number")
       case l @ LineAST(n, _, _) =>
-        if (lines contains n)
-          problem(l.pos, s"line number $n has already been encountered")
-        else
-          lines(n) = line
+        if (lines contains n) problem(l.pos, s"line number $n has already been encountered")
+        else lines(n) = line
     }
 
   def list(from: Option[Int], to: Option[Int]): Unit = {
