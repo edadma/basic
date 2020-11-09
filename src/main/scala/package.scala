@@ -8,8 +8,8 @@ package object basic {
     if (pos eq null)
       sys.error(error)
     else if (pos.line == 1)
-      sys.error(s"$error\n${pos.longString}")
+      sys.error(s"error: $error\n${pos.longString}")
     else
-      sys.error(s"${pos.line}: $error\n${pos.longString}")
+      sys.error(s"error on line ${pos.line}: $error\n${pos.longString}")
 
 }

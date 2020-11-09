@@ -6,6 +6,7 @@ object Main extends App {
     """
       |100 LET a = 3  'assign 3 to the variable 'a'
       |110 PRINT "a is "; a; " and", "a + 1 is ";a*(4+5)
+      |115 print sqrt(a)
       |120 END  'end program
       |130 PRINT "this line doesn't get executed"
       |""".stripMargin
@@ -15,6 +16,6 @@ object Main extends App {
 
   interp.load(ast)
   interp.list(None, None)
-  interp.run()
+  interp.run(None)
 
 }

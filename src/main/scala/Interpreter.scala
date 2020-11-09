@@ -1,19 +1,33 @@
 package xyz.hyperreal.basic
 
 import scala.collection.mutable
+import math._
 
 class Interpreter {
 
   private val WIDTH = 55
   private val lines = mutable.SortedMap.empty[Int, LineAST]
   private val vars = mutable.HashMap.empty[String, Any]
-  private val functions =
-    Map(
-      "SQRT" -> ((args: List[Any]) => math.sqrt(args.head.asInstanceOf[Double]))
-    )
   private var loc = Iterator.empty[(Int, LineAST)]
   private val precedences = Map("+" -> 1, "-" -> 1, "*" -> 2, "/" -> 2)
   private val spaces = Map("+" -> true, "-" -> true, "*" -> false, "/" -> false)
+
+  List[(String, Double => Double)](
+    "SQRT" -> sqrt,
+    "ABS" -> abs,
+    "COS" -> cos,
+    "SIN" -> sin,
+    "EXP" -> exp,
+    "LOG" -> log,
+  ) foreach {
+    case (n, f) => vars(n) = new BuiltinNumeric(n, f)
+  }
+
+  List(
+    "PI" -> math.Pi
+  ) foreach {
+    case (k, v) => vars(k) = new Constant(v)
+  }
 
   def load(program: List[LineAST]): Unit = program foreach add
 
@@ -25,12 +39,15 @@ class Interpreter {
         else lines(n) = line
     }
 
+  def clear(): Unit = vars.clear()
+
   def list(from: Option[Int], to: Option[Int]): Unit = {
     def expression(expr: ExpressionAST, prec: Int = 0): String =
       expr match {
-        case NumberAST(n)   => if (n.isWhole) n.toLong.toString else n.toString
-        case StringAST(s)   => s""""$s""""
-        case VariableAST(v) => v
+        case NumberAST(n)            => if (n.isWhole) n.toLong.toString else n.toString
+        case StringAST(s)            => s""""$s""""
+        case VariableAST(v, None)    => v
+        case VariableAST(v, Some(s)) => s"$v[${expression(s)}]"
         case InfixAST(left, _, op, right) =>
           val p = precedences(op)
           val s = if (spaces(op)) " " else ""
@@ -39,6 +56,8 @@ class Interpreter {
           val (lp, rp) = if (prec > p) ("(", ")") else ("", "")
 
           s"$lp$l$s$op$s$r$rp"
+        case PrefixAST(op, expr)     => s"$op${expression(expr)}"
+        case FunctionAST(name, args) => s"$name(${args map (expression(_)) mkString ", "})"
       }
 
     if (lines.nonEmpty) {
@@ -59,9 +78,9 @@ class Interpreter {
         case (line, LineAST(_, stat, comm)) =>
           val s =
             stat match {
-              case EndAST()                        => "END"
-              case NopAST()                        => ""
-              case LetAST(VariableAST(name), expr) => s"LET $name = ${expression(expr)}"
+              case EndAST()               => "END"
+              case NopAST()               => ""
+              case LetAST(variable, expr) => s"LET ${expression(variable)} = ${expression(expr)}"
               case PrintAST(args) =>
                 s"PRINT ${args map { case (e, sep) => s"${expression(e)}${sep getOrElse ""}" } mkString " "}"
             }
@@ -76,11 +95,11 @@ class Interpreter {
     }
   }
 
-  def run(): Unit = {
-    loc = lines.iterator
+  def run(from: Option[Int]): Unit = {
+    loc = lines.iteratorFrom(from.getOrElse(1))
 
     while (loc != null && loc.hasNext) {
-      loc.next match {
+      loc.next() match {
         case (_, l @ LineAST(_, stat, _)) => perform(stat)
       }
     }
@@ -94,13 +113,41 @@ class Interpreter {
           case (expr, None | Some(",")) => println(show(expr))
           case (expr, Some(";"))        => print(show(expr))
         }
-      case LetAST(v @ VariableAST(name), expr) =>
-        if (functions contains name)
-          problem(v.pos, s"reserved function name")
-        else
-          vars(name) = eval(expr)
-      case GotoAST(line) => loc = lines.iteratorFrom(line)
-      case EndAST()      => loc = null
+      case LetAST(v: VariableAST, expr) => assignable(v).value = eval(expr)
+      case GotoAST(line)                => loc = lines.iteratorFrom(line)
+      case EndAST()                     => loc = null
+    }
+
+  def index(v: VariableAST): Option[Double] =
+    v.sub.map(eval) match {
+      case Some(a: Double) if a < 0                  => problem(v.pos, s"an array subscript can't be negative")
+      case Some(a: Double) if !a.isWhole             => problem(v.pos, s"an array subscript must be a whole number")
+      case Some(_: Double) if !vars.contains(v.name) => problem(v.pos, s"array '${v.name}' has not been dimensioned")
+      case Some(_: Double) if !vars(v.name).isInstanceOf[Dim] =>
+        problem(v.pos, s"'${v.name}' has not been dimensioned as an array")
+      case Some(a: Double) if a >= vars(v.name).asInstanceOf[Dim].array.length =>
+        problem(v.pos, s"array subscript out of range: ${a.toLong}")
+      case a @ (Some(_: Double) | None) => a.asInstanceOf[Option[Double]]
+      case Some(a)                      => problem(v.pos, s"an array subscript must be a number: '$a'")
+    }
+
+  def access(v: VariableAST): Option[Cell] =
+    vars get v.name match {
+      case Some(Dim(array))                 => Some(array(index(v).get.toInt))
+      case c @ Some(_: Cell)                => c.asInstanceOf[Option[Cell]]
+      case Some(_: BuiltinNumeric | _: Def) => problem(v.pos, s"'${v.name}' is a function")
+      case Some(_: Constant)                => problem(v.pos, s"'${v.name}' is a constant")
+      case None                             => None
+    }
+
+  def assignable(v: VariableAST): Cell =
+    access(v) match {
+      case None =>
+        val cell = new Cell(null)
+
+        vars(v.name) = cell
+        cell
+      case Some(c: Cell) => c
     }
 
   def show(a: ExpressionAST): String =
@@ -113,22 +160,48 @@ class Interpreter {
     expr match {
       case NumberAST(n) => n
       case StringAST(s) => s
-      case e @ VariableAST(name) =>
-        vars get name match {
-          case None    => problem(e.pos, s"variable '$name' not found")
-          case Some(v) => v
+      case v: VariableAST =>
+        access(v) match {
+          case None          => problem(v.pos, s"variable '${v.name}' not found")
+          case Some(c: Cell) => c.value
+        }
+      case u @ PrefixAST(op, expr) =>
+        (op, eval(expr)) match {
+          case ("-", a: Double) => -a
+          case _                => problem(u.pos, s"invalid operation")
         }
       case InfixAST(left, oppos, op, right) =>
-        val l = eval(left)
-        val r = eval(right)
-
-        (l, op, r) match {
+        (eval(left), op, eval(right)) match {
           case (a: Double, "+", b: Double) => a + b
-          case (_, "+", _)                 => problem(oppos, s"can't add '$l' and '$r'")
+          case (l, "+", r)                 => problem(oppos, s"can't add '$l' and '$r'")
           case (a: Double, "*", b: Double) => a * b
-          case (_, "*", _)                 => problem(oppos, s"can't multiply '$l' and '$r'")
-          case _                           => problem(oppos, s"operation '$op' unrecognized")
+          case (l, "*", r)                 => problem(oppos, s"can't multiply '$l' and '$r'")
+          case _                           => problem(oppos, s"invalid operation")
+        }
+      case f @ FunctionAST(name, args) =>
+        vars get name match {
+          case None         => problem(f.pos, s"unknown function '$name'")
+          case Some(f: Def) => f(args map eval)
         }
     }
+
+  class Cell(var value: Any)
+
+  case class Constant(value: Any)
+
+  class BuiltinNumeric(name: String, val func: Double => Double) extends Def(name) {
+    def apply(args: List[Any]): Double =
+      args match {
+        case Nil | _ :: _ :: _ => problem(null, s"function '$name' takes one parameter")
+        case List(a: Double)   => func(a)
+        case List(a)           => problem(null, s"function '$name' expects a number, not '$a'")
+      }
+  }
+
+  case class Dim(array: Array[Cell])
+
+  abstract class Def(val name: String) extends (List[Any] => Any) {
+    def apply(args: List[Any]): Any
+  }
 
 }

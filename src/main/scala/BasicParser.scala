@@ -32,7 +32,9 @@ class BasicParser extends RegexParsers {
   def ident: Parser[String] = """[a-zA-Z_$%][a-zA-Z0-9_$%]*""".r ^^ (_.toUpperCase)
 
   def variable: Parser[VariableAST] =
-    positioned(ident ^^ VariableAST)
+    positioned(ident ~ opt("[" ~> expression <~ "]") ^^ {
+      case name ~ sub => VariableAST(name, sub)
+    })
 
   def program: Parser[List[LineAST]] = opt("""\s+""" r) ~> repsep(programLine, """\s+""" r) <~ opt("""\s+""" r)
 
@@ -68,7 +70,18 @@ class BasicParser extends RegexParsers {
       }
   }
 
-  def primary: Parser[ExpressionAST] = number | string | variable | "(" ~> expression <~ ")"
+  def function: Parser[FunctionAST] =
+    positioned(ident ~ "(" ~ rep1(expression) ~ ")" ^^ {
+      case name ~ _ ~ args ~ _ => FunctionAST(name, args)
+    })
+
+  def primary: Parser[ExpressionAST] =
+    "-" ~> expression ^^ (PrefixAST("-", _)) |
+      number |
+      string |
+      function |
+      variable |
+      "(" ~> expression <~ ")"
 
   def parseFromString[T](src: String, grammar: Parser[T]): T =
     parseAll(grammar, new CharSequenceReader(src)) match {

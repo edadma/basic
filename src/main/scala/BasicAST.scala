@@ -21,7 +21,7 @@ case class EndAST() extends StatementAST
 abstract class ExpressionAST extends BasicAST
 case class NumberAST(value: Double) extends ExpressionAST
 case class StringAST(value: String) extends ExpressionAST
-case class VariableAST(name: String) extends ExpressionAST
+case class VariableAST(name: String, sub: Option[ExpressionAST]) extends ExpressionAST
 case class FunctionAST(name: String, args: List[ExpressionAST]) extends ExpressionAST
 case class InfixAST(left: ExpressionAST, oppos: Position, op: String, right: ExpressionAST) extends ExpressionAST
 case class PrefixAST(op: String, expr: ExpressionAST) extends ExpressionAST
