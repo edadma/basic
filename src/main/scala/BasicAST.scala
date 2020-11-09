@@ -7,6 +7,7 @@ abstract class BasicAST extends Positional
 case class LineAST(line: Int, stat: StatementAST, comment: Option[String]) extends BasicAST
 
 abstract class StatementAST extends BasicAST { val comment: Option[String] = None }
+case class DimAST(name: String, dim: Int) extends StatementAST
 case class PrintAST(args: List[(ExpressionAST, Option[String])]) extends StatementAST
 case class InputAST(prompt: StringAST, vars: List[String]) extends StatementAST
 case class RemAST(rem: String) extends StatementAST

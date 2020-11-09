@@ -13,20 +13,25 @@ class Interpreter {
   private val spaces = Map("+" -> true, "-" -> true, "*" -> false, "/" -> false)
 
   List[(String, Double => Double)](
-    "SQRT" -> sqrt,
+    "SQR" -> sqrt,
+    "SGN" -> signum,
+    "INT" -> floor,
     "ABS" -> abs,
     "COS" -> cos,
     "SIN" -> sin,
     "EXP" -> exp,
     "LOG" -> log,
+    "FLOOR" -> floor,
+    "CEIL" -> ceil,
   ) foreach {
     case (n, f) => vars(n) = new BuiltinNumeric(n, f)
   }
 
   List(
-    "PI" -> math.Pi
+    "PI" -> Pi,
+    "E" -> E
   ) foreach {
-    case (k, v) => vars(k) = new Constant(v)
+    case (k, v) => vars(k) = Constant(v)
   }
 
   def load(program: List[LineAST]): Unit = program foreach add
@@ -78,6 +83,7 @@ class Interpreter {
         case (line, LineAST(_, stat, comm)) =>
           val s =
             stat match {
+              case DimAST(name, dim)      => s"DIM $name[$dim]"
               case EndAST()               => "END"
               case NopAST()               => ""
               case LetAST(variable, expr) => s"LET ${expression(variable)} = ${expression(expr)}"
@@ -107,11 +113,17 @@ class Interpreter {
 
   def perform(stat: StatementAST): Unit =
     stat match {
+      case d @ DimAST(name, dim) =>
+        vars get name match {
+          case Some(_)          => problem(d.pos, s"array '$name' can't be dimensioned")
+          case None if dim <= 0 => problem(d.pos, s"dimension must be positive")
+          case None             => vars(name) = Dim(Array.fill(dim)(new Cell(0)))
+        }
       case NopAST() | RemAST(_) =>
       case PrintAST(args) =>
         args foreach {
-          case (expr, None | Some(",")) => println(show(expr))
-          case (expr, Some(";"))        => print(show(expr))
+          case (expr, Some(";"))      => print(show(expr))
+          case (expr, None | Some(_)) => println(show(expr))
         }
       case LetAST(v: VariableAST, expr) => assignable(v).value = eval(expr)
       case GotoAST(line)                => loc = lines.iteratorFrom(line)

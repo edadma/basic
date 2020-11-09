@@ -20,7 +20,7 @@ class BasicParser extends RegexParsers {
     _.pos
   }
 
-  def line: Parser[Int] = """\d+""".r ^^ (s => s.toInt)
+  def integer: Parser[Int] = """\d+""".r ^^ (s => s.toInt)
 
   def number: Parser[NumberAST] =
     positioned("""-?\d+(\.\d*)?""".r ^^ (s => NumberAST(s.toDouble)))
@@ -39,18 +39,21 @@ class BasicParser extends RegexParsers {
   def program: Parser[List[LineAST]] = opt("""\s+""" r) ~> repsep(programLine, """\s+""" r) <~ opt("""\s+""" r)
 
   def programLine: Parser[LineAST] =
-    positioned(line ~ statement ~ opt("'.*" r) ^^ {
+    positioned(integer ~ statement ~ opt("'.*" r) ^^ {
       case l ~ s ~ c => LineAST(l, s, c)
     })
 
   def statement: Parser[StatementAST] =
     positioned(
-      ("print" | "PRINT") ~> rep(expression ~ opt(";" | ",") ^^ { case e ~ s => (e, s) }) ^^ PrintAST |
+      ("dim" | "DIM") ~> (ident ~ ("[" ~> integer <~ "]")) ^^ {
+        case n ~ d => DimAST(n, d)
+      } |
+        ("print" | "PRINT") ~> rep(expression ~ opt(";" | ",") ^^ { case e ~ s => (e, s) }) ^^ PrintAST |
         opt("let" | "LET") ~> (variable ~ "=" ~ expression) ^^ {
           case v ~ _ ~ e => LetAST(v, e)
         } |
-        opt("goto" | "GOTO") ~> line ^^ GotoAST |
-        opt("end" | "END") ^^ (_ => EndAST())
+        ("goto" | "GOTO") ~> integer ^^ GotoAST |
+        ("end" | "END") ^^ (_ => EndAST())
     )
 
   def expression: Parser[ExpressionAST] =

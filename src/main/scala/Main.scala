@@ -5,6 +5,9 @@ object Main extends App {
   val program =
     """
       |100 LET a = 3  'assign 3 to the variable 'a'
+      |105 DIM b[10]
+      |106 b[0] = 4
+      |107 print b[0]
       |110 PRINT "a is "; a; " and", "a + 1 is ";a*(4+5)
       |115 print sqrt(a)
       |120 END  'end program
