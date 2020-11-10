@@ -1,9 +1,11 @@
 package xyz.hyperreal.basic
 
+import java.io.PrintStream
+
 import scala.collection.mutable
 import math._
 
-class Interpreter {
+class Interpreter(out: PrintStream = Console.out) {
 
   private val WIDTH = 55
   private val lines = mutable.SortedMap.empty[Int, LineAST]
@@ -97,7 +99,7 @@ class Interpreter {
             if (c.length > WIDTH) " "
             else " " * (WIDTH - c.length)
 
-          println(s"$c$p${comm getOrElse ""}")
+          out.println(s"$c$p${comm getOrElse ""}")
       }
     }
   }
@@ -123,8 +125,8 @@ class Interpreter {
       case NopAST() | RemAST(_) =>
       case PrintAST(args) =>
         args foreach {
-          case (expr, Some(";"))      => print(show(expr))
-          case (expr, None | Some(_)) => println(show(expr))
+          case (expr, Some(";"))      => out.print(show(expr))
+          case (expr, None | Some(_)) => out.println(show(expr))
         }
       case LetAST(v: VariableAST, expr) => assignable(v).value = eval(expr)
       case GotoAST(line)                => loc = lines.iteratorFrom(line)

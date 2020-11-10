@@ -1,9 +1,12 @@
 package xyz.hyperreal.basic
 
 import java.awt.geom.Rectangle2D
+import java.io.{OutputStream, PrintStream}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.swing._
 import scala.swing.Swing._
+import scala.swing.event.{Event, KeyTyped}
 import scala.util.Using
 
 object Main extends App {
@@ -32,39 +35,39 @@ object Main extends App {
     }
   }
 
-  object UI extends MainFrame {
-    val screen = new AtariScreen
+  case class Keyboard(c: Char) extends Event
 
-    title = "Atari 400"
-    contents = screen
-  }
-
-  class AtariScreen extends Panel {
-    private val ON = new Color(0, 255, 0)
-    private val OFF = new Color(0, 0, 0)
+  class Screen(width: Int, height: Int, oncolor: Color, offcolor: Color) extends Panel {
     private val PIXEL = 4
     private val CHAR = 8
-    private val WIDTH = 320
-    private val CWIDTH = WIDTH / 8
-    private val HEIGHT = 192
-    private val CHEIGHT = HEIGHT / 8
-    private val screen = Array.fill[Boolean](HEIGHT, WIDTH)(false)
-    private val text = Array.fill[Char](CHEIGHT, CWIDTH)(' ')
+    private val cwidth = width / 8
+    private val cheight = height / 8
+    private val screen = Array.fill[Boolean](height, width)(false)
+    private val text = Array.fill[Char](cheight, cwidth)(' ')
     private var showcursor = true
     private var cx = 0
     private var cy = 0
 
-    preferredSize = (WIDTH * PIXEL, HEIGHT * PIXEL)
+    focusable = true
+    requestFocus
+    preferredSize = (width * PIXEL, height * PIXEL)
+    listenTo(keys)
+
+    reactions += {
+      case KeyTyped(_, c, _, _) => publish(Keyboard(c))
+    }
+
+    val out: OutputStream = (b: Int) => putchar(b.toChar)
 
     override def paintComponent(g: Graphics2D): Unit = {
       def paintPixel(x: Int, y: Int, on: Boolean): Unit = {
-        g.setColor(if (on) ON else OFF)
+        g.setColor(if (on) oncolor else offcolor)
         g.fillRect(x * PIXEL, y * PIXEL, PIXEL, PIXEL)
       }
 
       super.paintComponent(g)
 
-      for (i <- 0 until WIDTH; j <- 0 until HEIGHT)
+      for (i <- 0 until width; j <- 0 until height)
         paintPixel(i, j, screen(j)(i))
 
       if (showcursor) {
@@ -84,13 +87,13 @@ object Main extends App {
     def cursonOn: Boolean = showcursor
 
     def linefeedNoRepaint(): Unit = {
-      Array.copy(screen, CHAR, screen, 0, HEIGHT - CHAR)
+      Array.copy(screen, CHAR, screen, 0, height - CHAR)
 
       for (i <- 0 until CHAR)
-        screen(HEIGHT - CHAR + i) = Array.fill[Boolean](WIDTH)(false)
+        screen(height - CHAR + i) = Array.fill[Boolean](width)(false)
 
-      Array.copy(text, 1, text, 0, CHEIGHT - 1)
-      text(CHEIGHT - 1) = Array.fill[Char](CWIDTH)(' ')
+      Array.copy(text, 1, text, 0, cheight - 1)
+      text(cheight - 1) = Array.fill[Char](cwidth)(' ')
     }
 
     def position_=(p: (Int, Int)): Unit = {
@@ -109,12 +112,13 @@ object Main extends App {
           if (cx > 0) {
             cx -= 1
             char(cx, cy, ' ')
+            repaint()
           }
         case '\r' =>
           cx = 0
           repaint()
         case '\n' =>
-          if (cy == CHEIGHT - 1)
+          if (cy == cheight - 1)
             linefeedNoRepaint()
           else
             cy += 1
@@ -125,8 +129,8 @@ object Main extends App {
         case _ =>
           char(cx, cy, c)
 
-          if (cx == CWIDTH - 1) {
-            if (cy == CHEIGHT - 1)
+          if (cx == cwidth - 1) {
+            if (cy == cheight - 1)
               linefeedNoRepaint()
             else
               cy += 1
@@ -139,23 +143,23 @@ object Main extends App {
       }
 
     def at(x: Int, y: Int): Char = {
-      require(0 <= x && x <= CWIDTH, s"x out of range: $x")
-      require(0 <= y && y <= CHEIGHT, s"y out of range: $y")
+      require(0 <= x && x <= cwidth, s"x out of range: $x")
+      require(0 <= y && y <= cheight, s"y out of range: $y")
 
       text(y)(x)
     }
 
     def char(x: Int, y: Int, c: Char): Unit = {
-      require(0 <= x && x <= CWIDTH, s"x out of range: $x")
-      require(0 <= y && y <= CHEIGHT, s"y out of range: $y")
+      require(0 <= x && x <= cwidth, s"x out of range: $x")
+      require(0 <= y && y <= cheight, s"y out of range: $y")
 
       text(y)(x) = c
       drawChar(x, y, c)
     }
 
     def string(x: Int, y: Int, s: String): Unit = {
-      require(0 <= x && x <= CWIDTH, s"x out of range: $x")
-      require(0 <= y && y <= CHEIGHT, s"y out of range: $y")
+      require(0 <= x && x <= cwidth, s"x out of range: $x")
+      require(0 <= y && y <= cheight, s"y out of range: $y")
 
       for (i <- 0 until s.length)
         char(x + i, y, s(i))
@@ -164,16 +168,16 @@ object Main extends App {
     def drawPixelNoRepaint(x: Int, y: Int, on: Boolean): Unit = screen(y)(x) = on
 
     def drawPixel(x: Int, y: Int, on: Boolean): Unit = {
-      require(0 <= x && x <= WIDTH, s"x out of range: $x")
-      require(0 <= y && y <= HEIGHT, s"y out of range: $y")
+      require(0 <= x && x <= width, s"x out of range: $x")
+      require(0 <= y && y <= height, s"y out of range: $y")
 
       drawPixelNoRepaint(x, y, on)
       repaint(new Rectangle(x * PIXEL, y * PIXEL, PIXEL, PIXEL))
     }
 
     def drawChar(x: Int, y: Int, c: Char): Unit = {
-      require(0 <= x && x <= CWIDTH, s"x out of range: $x")
-      require(0 <= y && y <= CHEIGHT, s"y out of range: $y")
+      require(0 <= x && x <= cwidth, s"x out of range: $x")
+      require(0 <= y && y <= cheight, s"y out of range: $y")
 
       val bitmap = lookup(atariFont, c)
 
@@ -184,34 +188,63 @@ object Main extends App {
     }
   }
 
+  object UI extends MainFrame {
+    val screen = new Screen(320, 192, new Color(0, 255, 0), new Color(0, 0, 0))
+    val out = new PrintStream(screen.out)
+    val linebuf = new StringBuilder
+    var command: String => Unit = _ => ()
+
+    contents = screen
+    listenTo(screen)
+
+    reactions += {
+      case Keyboard(c) =>
+        screen.putchar(c)
+
+        c match {
+          case '\n' =>
+            val c = linebuf.toString
+
+            linebuf.clear
+            command(c)
+          case '\b' =>
+            if (linebuf.nonEmpty)
+              linebuf.replace(linebuf.length - 1, linebuf.length, "")
+          case _ => linebuf += c
+        }
+    }
+  }
+
+  val program =
+    """
+        |100 LET a = 3  'assign 3 to the variable 'a'
+        |105 DIM b[10]
+        |106 b[0] = 4
+        |107 print b[0]
+        |110 PRINT "a is "; a; " and", "a + 1 is ";a*(4+5)
+        |115 print sqrt(a)
+        |120 END  'end program
+        |130 PRINT "this line doesn't get executed"
+        |""".stripMargin
+  val parser = new BasicParser
+  val interp = new Interpreter
+  val ast = BasicParser.parseProgram(program, parser)
+
+  interp.load(ast)
+
+  UI.title = "Tiny Basic"
+  UI.out.print(s"""Welcome to Tiny Basic v0.1.0
+                  |Type commands or enter program code.
+                  |
+                  |] """.stripMargin)
   UI.visible = true
-
-  for (i <- 1 to 24)
-    UI.screen.puts(s"testing $i\n")
-
-  //  show(ataripl, 'a')
-//  show(ataripl, 'A')
-//  show(ataripl, 'X')
-//  show(ataripl, '0')
-//  show(ataripl, '!')
-
-  //  val program =
-//    """
-//      |100 LET a = 3  'assign 3 to the variable 'a'
-//      |105 DIM b[10]
-//      |106 b[0] = 4
-//      |107 print b[0]
-//      |110 PRINT "a is "; a; " and", "a + 1 is ";a*(4+5)
-//      |115 print sqrt(a)
-//      |120 END  'end program
-//      |130 PRINT "this line doesn't get executed"
-//      |""".stripMargin
-//  val parser = new BasicParser
-//  val interp = new Interpreter
-//  val ast = BasicParser.parseProgram(program, parser)
-//
-//  interp.load(ast)
-//  interp.list(None, None)
-//  interp.run(None)
+  UI.command = c => {
+    c.toLowerCase match {
+      case "list" => interp.list(None, None)
+      case "run"  => interp.run(None)
+    }
+    UI.out.print("] ")
+    println(s"command: $c")
+  }
 
 }
