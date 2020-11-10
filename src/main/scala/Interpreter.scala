@@ -19,6 +19,7 @@ class Interpreter {
     "ABS" -> abs,
     "COS" -> cos,
     "SIN" -> sin,
+    "TAN" -> tan,
     "EXP" -> exp,
     "LOG" -> log,
     "FLOOR" -> floor,
