@@ -25,6 +25,9 @@ class BasicParser extends RegexParsers {
   def number: Parser[NumberAST] =
     positioned("""-?\d+(\.\d*)?""".r ^^ (s => NumberAST(s.toDouble)))
 
+  def boolean: Parser[BooleanAST] =
+    positioned((kw("true") | kw("false")) ^^ (s => BooleanAST(s.toUpperCase == "TRUE")))
+
   def string: Parser[StringAST] =
     positioned(""""(?:""|[^"\x00-\x1F\x7F\\]|\\[\\'"bfnrt]|\\u[a-fA-F0-9]{4})*"""".r ^^ (s =>
       StringAST(s.substring(1, s.length - 1))))
@@ -47,6 +50,9 @@ class BasicParser extends RegexParsers {
 
   def statement: Parser[StatementAST] =
     positioned(
+//      kw("if") ~ expression ~ kw("then") ~ statement ~ opt(kw("else") ~> statement) ^^ {
+//        case _ ~ c ~ _ ~ y ~ n =>
+//      }
       kw("dim") ~> (ident ~ ("[" ~> integer <~ "]")) ^^ {
         case n ~ d => DimAST(n, d)
       } |
@@ -58,8 +64,32 @@ class BasicParser extends RegexParsers {
         kw("end") ^^ (_ => EndAST())
     )
 
+  val leftAssociativeOperator: (ExpressionAST ~ List[Position ~ String ~ ExpressionAST]) => ExpressionAST = {
+    case e ~ l =>
+      l.foldLeft(e) {
+        case (x, p ~ o ~ y) => InfixAST(x, p, o, y)
+      }
+  }
+
   def expression: Parser[ExpressionAST] =
-    additive
+    orExpression
+
+  def orExpression: Parser[ExpressionAST] =
+    andExpression ~ rep(pos ~ kw("or") ~ andExpression) ^^ leftAssociativeOperator
+
+  def andExpression: Parser[ExpressionAST] =
+    notExpression ~ rep(pos ~ kw("and") ~ notExpression) ^^ leftAssociativeOperator
+
+  def notExpression: Parser[ExpressionAST] = opt(kw("not")) ~ comparisonExpression ^^ {
+    case None ~ c => c
+    case _ ~ c    => PrefixAST("NOT", c)
+  }
+
+  def comparisonExpression: Parser[ExpressionAST] =
+    additive ~ opt(pos ~ ("<=" | ">=" | "<>" | "<" | ">" | "=") ~ additive) ^^ {
+      case a ~ None            => a
+      case l ~ Some(p ~ o ~ r) => InfixAST(l, p, o, r)
+    }
 
   def additive: Parser[ExpressionAST] = multiplicative ~ rep(pos ~ ("+" | "-") ~ multiplicative) ^^ {
     case e ~ l =>
@@ -82,6 +112,7 @@ class BasicParser extends RegexParsers {
 
   def primary: Parser[ExpressionAST] =
     "-" ~> expression ^^ (PrefixAST("-", _)) |
+      boolean |
       number |
       string |
       function |

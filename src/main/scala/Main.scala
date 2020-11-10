@@ -221,9 +221,10 @@ object Main extends App {
 
   val program =
     """
-        |100 print "asdf"
-        |105 print "qwer"
-        |110 end
+        |100 a = 3
+        |110 print "a + 4 = "; a + 4
+        |115 print a < 4
+        |120 end
         |""".stripMargin
   val parser = new BasicParser
   val interp = new Interpreter(UI.out)

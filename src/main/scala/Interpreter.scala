@@ -10,8 +10,8 @@ class Interpreter(out: PrintStream = Console.out) {
   private val lines = mutable.SortedMap.empty[Int, LineAST]
   private val vars = mutable.HashMap.empty[String, Any]
   private var loc = Iterator.empty[(Int, LineAST)]
-  private val precedences = Map("+" -> 1, "-" -> 1, "*" -> 2, "/" -> 2)
-  private val spaces = Map("+" -> true, "-" -> true, "*" -> false, "/" -> false)
+  private val precedences = Map("<" -> 10, ">" -> 10, "+" -> 20, "-" -> 20, "*" -> 30, "/" -> 30)
+  private val spaces = Map("<" -> true, ">" -> true, "+" -> true, "-" -> true, "*" -> false, "/" -> false)
 
   List[(String, Double => Double)](
     "SQR" -> sqrt,
@@ -51,6 +51,7 @@ class Interpreter(out: PrintStream = Console.out) {
   def list(from: Option[Int], to: Option[Int]): Unit = {
     def expression(expr: ExpressionAST, prec: Int = 0): String =
       expr match {
+        case BooleanAST(b)           => if (b) "TRUE" else "FALSE"
         case NumberAST(n)            => if (n.isWhole) n.toLong.toString else n.toString
         case StringAST(s)            => s""""$s""""
         case VariableAST(v, None)    => v
@@ -63,7 +64,7 @@ class Interpreter(out: PrintStream = Console.out) {
           val (lp, rp) = if (prec > p) ("(", ")") else ("", "")
 
           s"$lp$l$s$op$s$r$rp"
-        case PrefixAST(op, expr)     => s"$op${expression(expr)}"
+        case PrefixAST(op, expr)     => s"$op${if (op.head.isLetter) " " else ""}${expression(expr)}"
         case FunctionAST(name, args) => s"$name(${args map (expression(_)) mkString ", "})"
       }
 
@@ -163,14 +164,16 @@ class Interpreter(out: PrintStream = Console.out) {
 
   def show(a: ExpressionAST): String =
     eval(a) match {
+      case b: Boolean             => if (b) "TRUE" else "FALSE"
       case w: Double if w.isWhole => w.toLong.toString
       case v                      => String.valueOf(v)
     }
 
   def eval(expr: ExpressionAST): Any =
     expr match {
-      case NumberAST(n) => n
-      case StringAST(s) => s
+      case BooleanAST(b) => b
+      case NumberAST(n)  => n
+      case StringAST(s)  => s
       case v: VariableAST =>
         access(v) match {
           case None          => problem(v.pos, s"variable '${v.name}' not found")
@@ -178,8 +181,9 @@ class Interpreter(out: PrintStream = Console.out) {
         }
       case u @ PrefixAST(op, expr) =>
         (op, eval(expr)) match {
-          case ("-", a: Double) => -a
-          case _                => problem(u.pos, s"invalid operation")
+          case ("-", a: Double)    => -a
+          case ("NOT", a: Boolean) => !a
+          case (o, v)              => problem(u.pos, s"invalid operation: '$o $v'")
         }
       case InfixAST(left, oppos, op, right) =>
         (eval(left), op, eval(right)) match {
@@ -187,6 +191,11 @@ class Interpreter(out: PrintStream = Console.out) {
           case (l, "+", r)                 => problem(oppos, s"can't add '$l' and '$r'")
           case (a: Double, "*", b: Double) => a * b
           case (l, "*", r)                 => problem(oppos, s"can't multiply '$l' and '$r'")
+          case (l: Double, "<", r: Double) => l < r
+          case (l: String, "<", r: String) => l < r
+          case (l: Double, ">", r: Double) => l > r
+          case (l: String, ">", r: String) => l > r
+          case (l, "<" | ">", r)           => problem(oppos, s"can't compare '$l' and '$r'")
           case _                           => problem(oppos, s"invalid operation")
         }
       case f @ FunctionAST(name, args) =>

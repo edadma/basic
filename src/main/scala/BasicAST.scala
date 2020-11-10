@@ -20,6 +20,7 @@ case class NopAST() extends StatementAST
 case class EndAST() extends StatementAST
 
 abstract class ExpressionAST extends BasicAST
+case class BooleanAST(value: Boolean) extends ExpressionAST
 case class NumberAST(value: Double) extends ExpressionAST
 case class StringAST(value: String) extends ExpressionAST
 case class VariableAST(name: String, sub: Option[ExpressionAST]) extends ExpressionAST
