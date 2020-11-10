@@ -8,7 +8,7 @@ import scala.util.Using
 
 object Main extends App {
 
-  val ataripl =
+  val atariFont =
     Using(new java.io.FileInputStream("ATARI.FNT"))(_.readAllBytes).getOrElse(sys.error("couldn't load FNT file"))
 
   def lookup(fnt: Array[Byte], char: Char) = {
@@ -48,63 +48,108 @@ object Main extends App {
     private val CWIDTH = WIDTH / 8
     private val HEIGHT = 192
     private val CHEIGHT = HEIGHT / 8
-    private val screen = Array.ofDim[Boolean](WIDTH, HEIGHT)
-    private val text = Array.fill[Char](CWIDTH, CHEIGHT)(' ')
-    private var cursoron = true
+    private val screen = Array.fill[Boolean](HEIGHT, WIDTH)(false)
+    private val text = Array.fill[Char](CHEIGHT, CWIDTH)(' ')
+    private var showcursor = true
     private var cx = 0
     private var cy = 0
 
     preferredSize = (WIDTH * PIXEL, HEIGHT * PIXEL)
 
     override def paintComponent(g: Graphics2D): Unit = {
-      super.paintComponent(g)
-
-      for (i <- 0 until WIDTH; j <- 0 until HEIGHT) {
-        g.setColor(if (screen(i)(j)) ON else OFF)
-        g.fillRect(i * PIXEL, j * PIXEL, PIXEL, PIXEL)
+      def paintPixel(x: Int, y: Int, on: Boolean): Unit = {
+        g.setColor(if (on) ON else OFF)
+        g.fillRect(x * PIXEL, y * PIXEL, PIXEL, PIXEL)
       }
 
-      if (cursoron)
-        drawCursor(cx, cy)
+      super.paintComponent(g)
+
+      for (i <- 0 until WIDTH; j <- 0 until HEIGHT)
+        paintPixel(i, j, screen(j)(i))
+
+      if (showcursor) {
+        val x = cx * CHAR
+        val y = cy * CHAR
+
+        for (i <- x until x + CHAR; j <- y until y + CHAR)
+          paintPixel(i, j, !screen(j)(i))
+      }
     }
 
-    def linefeed(): Unit = {}
+    def cursonOn_=(on: Boolean): Unit = {
+      showcursor = on
+      repaint()
+    }
+
+    def cursonOn: Boolean = showcursor
+
+    def linefeedNoRepaint(): Unit = {
+      Array.copy(screen, CHAR, screen, 0, HEIGHT - CHAR)
+
+      for (i <- 0 until CHAR)
+        screen(HEIGHT - CHAR + i) = Array.fill[Boolean](WIDTH)(false)
+
+      Array.copy(text, 1, text, 0, CHEIGHT - 1)
+      text(CHEIGHT - 1) = Array.fill[Char](CWIDTH)(' ')
+    }
+
+    def position_=(p: (Int, Int)): Unit = {
+      cx = p._1
+      cy = p._2
+      repaint()
+    }
+
+    def position: (Int, Int) = (cx, cy)
 
     def puts(s: String): Unit = s foreach putchar
 
     def putchar(c: Char): Unit =
       c match {
         case '\b' =>
-          if (cx > 0)
+          if (cx > 0) {
             cx -= 1
-        case '\r' => cx = 0
+            char(cx, cy, ' ')
+          }
+        case '\r' =>
+          cx = 0
+          repaint()
         case '\n' =>
           if (cy == CHEIGHT - 1)
-            linefeed()
+            linefeedNoRepaint()
           else
             cy += 1
 
           cx = 0
+          repaint()
         case _ if c < ' ' || c > '~' => putchar('?')
         case _ =>
           char(cx, cy, c)
 
           if (cx == CWIDTH - 1) {
             if (cy == CHEIGHT - 1)
-              linefeed()
+              linefeedNoRepaint()
             else
               cy += 1
 
             cx = 0
           } else
             cx += 1
+
+          repaint()
       }
+
+    def at(x: Int, y: Int): Char = {
+      require(0 <= x && x <= CWIDTH, s"x out of range: $x")
+      require(0 <= y && y <= CHEIGHT, s"y out of range: $y")
+
+      text(y)(x)
+    }
 
     def char(x: Int, y: Int, c: Char): Unit = {
       require(0 <= x && x <= CWIDTH, s"x out of range: $x")
       require(0 <= y && y <= CHEIGHT, s"y out of range: $y")
 
-      text(x)(y) = c
+      text(y)(x) = c
       drawChar(x, y, c)
     }
 
@@ -116,36 +161,33 @@ object Main extends App {
         char(x + i, y, s(i))
     }
 
+    def drawPixelNoRepaint(x: Int, y: Int, on: Boolean): Unit = screen(y)(x) = on
+
     def drawPixel(x: Int, y: Int, on: Boolean): Unit = {
       require(0 <= x && x <= WIDTH, s"x out of range: $x")
       require(0 <= y && y <= HEIGHT, s"y out of range: $y")
 
-      screen(x)(y) = on
+      drawPixelNoRepaint(x, y, on)
       repaint(new Rectangle(x * PIXEL, y * PIXEL, PIXEL, PIXEL))
-    }
-
-    def drawCursor(x: Int, y: Int): Unit = {
-      require(0 <= x && x <= CWIDTH, s"x out of range: $x")
-      require(0 <= y && y <= CHEIGHT, s"y out of range: $y")
-
-      for (i <- 0 until 8; j <- 0 until 8)
-        drawPixel(x * CHAR + j, y * CHAR + i, on = true)
     }
 
     def drawChar(x: Int, y: Int, c: Char): Unit = {
       require(0 <= x && x <= CWIDTH, s"x out of range: $x")
       require(0 <= y && y <= CHEIGHT, s"y out of range: $y")
 
-      val bitmap = lookup(ataripl, c)
+      val bitmap = lookup(atariFont, c)
 
       for (i <- 0 until 8; j <- 0 until 8)
-        drawPixel(x * CHAR + j, y * CHAR + i, if (((bitmap(i) >> (7 - j)) & 1) == 1) true else false)
+        drawPixelNoRepaint(x * CHAR + j, y * CHAR + i, if (((bitmap(i) >> (7 - j)) & 1) == 1) true else false)
+
+      repaint(new Rectangle(x * PIXEL, y * PIXEL, PIXEL * CHAR, PIXEL * CHAR))
     }
   }
 
   UI.visible = true
-  UI.screen.puts(
-    "Atari's entry into the home computing market put out some very capable machines with all sorts of hardware tricks (the creative geniuses behind it would go on to form Amiga).")
+
+  for (i <- 1 to 24)
+    UI.screen.puts(s"testing $i\n")
 
   //  show(ataripl, 'a')
 //  show(ataripl, 'A')
