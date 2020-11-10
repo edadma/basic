@@ -7,7 +7,6 @@ import math._
 
 class Interpreter(out: PrintStream = Console.out) {
 
-  private val WIDTH = 55
   private val lines = mutable.SortedMap.empty[Int, LineAST]
   private val vars = mutable.HashMap.empty[String, Any]
   private var loc = Iterator.empty[(Int, LineAST)]
@@ -86,6 +85,7 @@ class Interpreter(out: PrintStream = Console.out) {
         case (line, LineAST(_, stat, comm)) =>
           val s =
             stat match {
+              case GotoAST(line)          => s"GOTO $line"
               case DimAST(name, dim)      => s"DIM $name[$dim]"
               case EndAST()               => "END"
               case NopAST()               => ""
@@ -94,12 +94,8 @@ class Interpreter(out: PrintStream = Console.out) {
                 s"PRINT ${args map { case (e, sep) => s"${expression(e)}${sep getOrElse ""}" } mkString " "}"
             }
           val l = line.formatted(s"%${width}s")
-          val c = s"$l $s"
-          val p =
-            if (c.length > WIDTH) " "
-            else " " * (WIDTH - c.length)
 
-          out.println(s"$c$p${comm getOrElse ""}")
+          out.println(s"$l $s${if (comm.isDefined) comm.get else ""}")
       }
     }
   }

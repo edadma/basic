@@ -43,17 +43,19 @@ class BasicParser extends RegexParsers {
       case l ~ s ~ c => LineAST(l, s, c)
     })
 
+  def kw(s: String): Regex = s"(${s.toLowerCase}|${s.toUpperCase})\\b".r
+
   def statement: Parser[StatementAST] =
     positioned(
-      ("dim" | "DIM") ~> (ident ~ ("[" ~> integer <~ "]")) ^^ {
+      kw("dim") ~> (ident ~ ("[" ~> integer <~ "]")) ^^ {
         case n ~ d => DimAST(n, d)
       } |
-        ("print" | "PRINT") ~> rep(expression ~ opt(";" | ",") ^^ { case e ~ s => (e, s) }) ^^ PrintAST |
-        opt("let" | "LET") ~> (variable ~ "=" ~ expression) ^^ {
+        kw("print") ~> rep(expression ~ opt(";" | ",") ^^ { case e ~ s => (e, s) }) ^^ PrintAST |
+        opt(kw("let")) ~> (variable ~ "=" ~ expression) ^^ {
           case v ~ _ ~ e => LetAST(v, e)
         } |
-        ("goto" | "GOTO") ~> integer ^^ GotoAST |
-        ("end" | "END") ^^ (_ => EndAST())
+        kw("goto") ~> integer ^^ GotoAST |
+        kw("end") ^^ (_ => EndAST())
     )
 
   def expression: Parser[ExpressionAST] =

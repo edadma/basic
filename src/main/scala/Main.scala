@@ -51,6 +51,7 @@ object Main extends App {
     focusable = true
     requestFocus
     preferredSize = (width * PIXEL, height * PIXEL)
+    background = offcolor
     listenTo(keys)
 
     reactions += {
@@ -62,7 +63,7 @@ object Main extends App {
     override def paintComponent(g: Graphics2D): Unit = {
       def paintPixel(x: Int, y: Int, on: Boolean): Unit = {
         g.setColor(if (on) oncolor else offcolor)
-        g.fillRect(x * PIXEL, y * PIXEL, PIXEL, PIXEL)
+        g.fillRect(x * PIXEL, y * PIXEL, PIXEL - 1, PIXEL - 1)
       }
 
       super.paintComponent(g)
@@ -184,7 +185,7 @@ object Main extends App {
       for (i <- 0 until 8; j <- 0 until 8)
         drawPixelNoRepaint(x * CHAR + j, y * CHAR + i, if (((bitmap(i) >> (7 - j)) & 1) == 1) true else false)
 
-      repaint(new Rectangle(x * PIXEL, y * PIXEL, PIXEL * CHAR, PIXEL * CHAR))
+      repaint(new Rectangle(x * PIXEL * CHAR, y * PIXEL * CHAR, PIXEL * CHAR, PIXEL * CHAR))
     }
   }
 
@@ -199,35 +200,33 @@ object Main extends App {
 
     reactions += {
       case Keyboard(c) =>
-        screen.putchar(c)
-
         c match {
           case '\n' =>
-            val c = linebuf.toString
+            val s = linebuf.toString
 
+            screen.putchar(c)
             linebuf.clear
-            command(c)
+            command(s)
           case '\b' =>
-            if (linebuf.nonEmpty)
+            if (linebuf.nonEmpty) {
+              screen.putchar(c)
               linebuf.replace(linebuf.length - 1, linebuf.length, "")
-          case _ => linebuf += c
+            }
+          case _ =>
+            screen.putchar(c)
+            linebuf += c
         }
     }
   }
 
   val program =
     """
-        |100 LET a = 3  'assign 3 to the variable 'a'
-        |105 DIM b[10]
-        |106 b[0] = 4
-        |107 print b[0]
-        |110 PRINT "a is "; a; " and", "a + 1 is ";a*(4+5)
-        |115 print sqrt(a)
-        |120 END  'end program
-        |130 PRINT "this line doesn't get executed"
+        |100 print "asdf"
+        |105 print "qwer"
+        |110 end
         |""".stripMargin
   val parser = new BasicParser
-  val interp = new Interpreter
+  val interp = new Interpreter(UI.out)
   val ast = BasicParser.parseProgram(program, parser)
 
   interp.load(ast)
@@ -239,12 +238,14 @@ object Main extends App {
                   |] """.stripMargin)
   UI.visible = true
   UI.command = c => {
-    c.toLowerCase match {
-      case "list" => interp.list(None, None)
-      case "run"  => interp.run(None)
+    c.trim.toUpperCase match {
+      case ""     =>
+      case "LIST" => interp.list(None, None)
+      case "RUN"  => interp.run(None)
+      case com    => UI.out.println(s"unrecognized command: $com")
     }
-    UI.out.print("] ")
-    println(s"command: $c")
+
+    UI.out.print("\n Ok\n] ")
   }
 
 }
