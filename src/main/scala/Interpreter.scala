@@ -10,8 +10,9 @@ class Interpreter(out: PrintStream = Console.out) {
   private val lines = mutable.SortedMap.empty[Int, LineAST]
   private val vars = mutable.HashMap.empty[String, Any]
   private var loc = Iterator.empty[(Int, LineAST)]
-  private val precedences = Map("<" -> 10, ">" -> 10, "+" -> 20, "-" -> 20, "*" -> 30, "/" -> 30)
-  private val spaces = Map("<" -> true, ">" -> true, "+" -> true, "-" -> true, "*" -> false, "/" -> false)
+  private val precedences = Map("AND" -> 1, "OR" -> 2, "<" -> 10, ">" -> 10, "+" -> 20, "-" -> 20, "*" -> 30, "/" -> 30)
+  private val spaces =
+    Map("AND" -> true, "OR" -> true, "<" -> true, ">" -> true, "+" -> true, "-" -> true, "*" -> false, "/" -> false)
 
   List[(String, Double => Double)](
     "SQR" -> sqrt,
@@ -64,7 +65,7 @@ class Interpreter(out: PrintStream = Console.out) {
           val (lp, rp) = if (prec > p) ("(", ")") else ("", "")
 
           s"$lp$l$s$op$s$r$rp"
-        case PrefixAST(op, expr)     => s"$op${if (op.head.isLetter) " " else ""}${expression(expr)}"
+        case PrefixAST(op, expr)     => s"$op${if (op.head.isLetter) " " else ""}${expression(expr, prec)}"
         case FunctionAST(name, args) => s"$name(${args map (expression(_)) mkString ", "})"
       }
 
@@ -184,6 +185,26 @@ class Interpreter(out: PrintStream = Console.out) {
           case ("-", a: Double)    => -a
           case ("NOT", a: Boolean) => !a
           case (o, v)              => problem(u.pos, s"invalid operation: '$o $v'")
+        }
+      case InfixAST(left, _, "AND", right) =>
+        eval(left) match {
+          case l: Boolean if !l => false
+          case _: Boolean =>
+            eval(right) match {
+              case r: Boolean => r
+              case _          => problem(right.pos, "expected boolean")
+            }
+          case _ => problem(left.pos, "expected boolean")
+        }
+      case InfixAST(left, _, "OR", right) =>
+        eval(left) match {
+          case l: Boolean if l => true
+          case _: Boolean =>
+            eval(right) match {
+              case r: Boolean => r
+              case _          => problem(right.pos, "expected boolean")
+            }
+          case _ => problem(left.pos, "expected boolean")
         }
       case InfixAST(left, oppos, op, right) =>
         (eval(left), op, eval(right)) match {

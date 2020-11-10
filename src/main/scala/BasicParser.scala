@@ -64,10 +64,10 @@ class BasicParser extends RegexParsers {
         kw("end") ^^ (_ => EndAST())
     )
 
-  val leftAssociativeOperator: (ExpressionAST ~ List[Position ~ String ~ ExpressionAST]) => ExpressionAST = {
+  val leftAssociative: (ExpressionAST ~ List[Position ~ String ~ ExpressionAST]) => ExpressionAST = {
     case e ~ l =>
       l.foldLeft(e) {
-        case (x, p ~ o ~ y) => InfixAST(x, p, o, y)
+        case (x, p ~ o ~ y) => InfixAST(x, p, o.toUpperCase, y)
       }
   }
 
@@ -75,10 +75,10 @@ class BasicParser extends RegexParsers {
     orExpression
 
   def orExpression: Parser[ExpressionAST] =
-    andExpression ~ rep(pos ~ kw("or") ~ andExpression) ^^ leftAssociativeOperator
+    andExpression ~ rep(pos ~ kw("or") ~ andExpression) ^^ leftAssociative
 
   def andExpression: Parser[ExpressionAST] =
-    notExpression ~ rep(pos ~ kw("and") ~ notExpression) ^^ leftAssociativeOperator
+    notExpression ~ rep(pos ~ kw("and") ~ notExpression) ^^ leftAssociative
 
   def notExpression: Parser[ExpressionAST] = opt(kw("not")) ~ comparisonExpression ^^ {
     case None ~ c => c
@@ -91,19 +91,9 @@ class BasicParser extends RegexParsers {
       case l ~ Some(p ~ o ~ r) => InfixAST(l, p, o, r)
     }
 
-  def additive: Parser[ExpressionAST] = multiplicative ~ rep(pos ~ ("+" | "-") ~ multiplicative) ^^ {
-    case e ~ l =>
-      l.foldLeft(e) {
-        case (x, p ~ o ~ y) => InfixAST(x, p, o, y)
-      }
-  }
+  def additive: Parser[ExpressionAST] = multiplicative ~ rep(pos ~ ("+" | "-") ~ multiplicative) ^^ leftAssociative
 
-  def multiplicative: Parser[ExpressionAST] = primary ~ rep(pos ~ ("*" | "/") ~ primary) ^^ {
-    case e ~ l =>
-      l.foldLeft(e) {
-        case (x, p ~ o ~ y) => InfixAST(x, p, o, y)
-      }
-  }
+  def multiplicative: Parser[ExpressionAST] = primary ~ rep(pos ~ ("*" | "/") ~ primary) ^^ leftAssociative
 
   def function: Parser[FunctionAST] =
     positioned(ident ~ "(" ~ rep1(expression) ~ ")" ^^ {

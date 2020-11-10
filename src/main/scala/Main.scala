@@ -223,7 +223,6 @@ object Main extends App {
     """
         |100 a = 3
         |110 print "a + 4 = "; a + 4
-        |115 print a < 4
         |120 end
         |""".stripMargin
   val parser = new BasicParser
