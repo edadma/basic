@@ -35,7 +35,7 @@ class BasicParser extends RegexParsers {
   def ident: Parser[String] = """[a-zA-Z_$%][a-zA-Z0-9_$%]*""".r ^^ (_.toUpperCase)
 
   def variable: Parser[VariableAST] =
-    positioned(ident ~ opt("[" ~> expression <~ "]") ^^ {
+    positioned(ident ~ opt("[" ~> expression <~ "]" | "(" ~> expression <~ ")") ^^ {
       case name ~ sub => VariableAST(name, sub)
     })
 
@@ -60,7 +60,7 @@ class BasicParser extends RegexParsers {
           kw("else") ~> (statement | (integer ^^ GotoAST))) ^^ {
           case _ ~ c ~ _ ~ y ~ n => IfAST(c, y, n)
         } |
-        kw("dim") ~> (ident ~ ("[" ~> integer <~ "]")) ^^ {
+        kw("dim") ~> (ident ~ ("[" ~> integer <~ "]" | "(" ~> integer <~ ")")) ^^ {
           case n ~ d => DimAST(n, d)
         } |
         kw("print") ~> rep(expression ~ opt(";" | ",") ^^ { case e ~ s => (e, s) }) ^^ PrintAST |
