@@ -14,8 +14,9 @@ case class RemAST(rem: String) extends StatementAST
 case class LetAST(name: VariableAST, expr: ExpressionAST) extends StatementAST
 case class GotoAST(line: Int) extends StatementAST
 case class IfAST(cond: ExpressionAST, thenPart: StatementAST, elsePart: Option[StatementAST]) extends StatementAST
-case class ForAST(name: VariableAST, from: Int, to: Int, step: Option[Int]) extends StatementAST
-case class NextAST(name: Option[VariableAST]) extends StatementAST
+case class ForAST(index: VariableAST, from: ExpressionAST, to: ExpressionAST, step: Option[ExpressionAST])
+    extends StatementAST
+case class NextAST(index: VariableAST) extends StatementAST
 case class NopAST() extends StatementAST
 case class EndAST() extends StatementAST
 

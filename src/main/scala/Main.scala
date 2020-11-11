@@ -220,11 +220,11 @@ object Main extends App {
   }
 
   val program =
-    """
-        |100 a = 3
-        |110 print "a + 4 = "; a + 4
-        |120 end
-        |""".stripMargin
+    """100 FOR I = 1 TO 3
+      |110   PRINT "I = "; I
+      |120 NEXT I
+      |130 END
+      |""".stripMargin
   val parser = new BasicParser
   val interp = new Interpreter(UI.out)
   val ast = BasicParser.parseProgram(program, parser)
@@ -239,13 +239,22 @@ object Main extends App {
   UI.visible = true
   UI.command = c => {
     c.trim.toUpperCase match {
-      case ""     =>
-      case "LIST" => interp.list(None, None)
-      case "RUN"  => interp.run(None)
-      case com    => UI.out.println(s"unrecognized command: $com")
+      case "" =>
+        UI.out.print("\n Ok\n] ")
+      case "LIST" =>
+        interp.list(None, None)
+        UI.out.print("\n Ok\n] ")
+      case "RUN" =>
+        new Thread {
+          override def run(): Unit = {
+            interp.run(None)
+            UI.out.print("\n Ok\n] ")
+          }
+        }.start()
+      case com =>
+        UI.out.println(s"unrecognized command: $com")
+        UI.out.print("\n] ")
     }
-
-    UI.out.print("\n Ok\n] ")
   }
 
 }

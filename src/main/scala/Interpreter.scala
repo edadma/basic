@@ -10,9 +10,18 @@ class Interpreter(out: PrintStream = Console.out) {
   private val lines = mutable.SortedMap.empty[Int, LineAST]
   private val vars = mutable.HashMap.empty[String, Any]
   private var loc = Iterator.empty[(Int, LineAST)]
-  private val precedences = Map("AND" -> 1, "OR" -> 2, "<" -> 10, ">" -> 10, "+" -> 20, "-" -> 20, "*" -> 30, "/" -> 30)
+  private val precedences =
+    Map("AND" -> 1, "OR" -> 2, "<" -> 10, ">" -> 10, "=" -> 10, "+" -> 20, "-" -> 20, "*" -> 30, "/" -> 30)
   private val spaces =
-    Map("AND" -> true, "OR" -> true, "<" -> true, ">" -> true, "+" -> true, "-" -> true, "*" -> false, "/" -> false)
+    Map("AND" -> true,
+        "OR" -> true,
+        "<" -> true,
+        ">" -> true,
+        "=" -> true,
+        "+" -> true,
+        "-" -> true,
+        "*" -> false,
+        "/" -> false)
 
   List[(String, Double => Double)](
     "SQR" -> sqrt,
@@ -69,6 +78,25 @@ class Interpreter(out: PrintStream = Console.out) {
         case FunctionAST(name, args) => s"$name(${args map (expression(_)) mkString ", "})"
       }
 
+    def statement(stat: StatementAST): String =
+      stat match {
+        case ForAST(name, from, to, step) =>
+          s"FOR ${expression(name)} = ${expression(from)} TO ${expression(to)}${if (step.isDefined)
+            s" STEP ${expression(step.get)}"
+          else ""}"
+        case NextAST(name)          => s"NEXT ${expression(name)}"
+        case GotoAST(line)          => s"GOTO $line"
+        case DimAST(name, dim)      => s"DIM $name[$dim]"
+        case EndAST()               => "END"
+        case NopAST()               => ""
+        case LetAST(variable, expr) => s"LET ${expression(variable)} = ${expression(expr)}"
+        case PrintAST(args) =>
+          s"PRINT ${args map { case (e, sep) => s"${expression(e)}${sep getOrElse ""}" } mkString " "}"
+        case IfAST(cond, thenPart, elsePart) =>
+          s"IF ${expression(cond)} THEN ${statement(thenPart)}${if (elsePart.isDefined) s" ELSE ${statement(elsePart.get)}"
+          else ""}"
+      }
+
     if (lines.nonEmpty) {
       val start =
         from match {
@@ -85,17 +113,8 @@ class Interpreter(out: PrintStream = Console.out) {
 
       range foreach {
         case (line, LineAST(_, stat, comm)) =>
-          val s =
-            stat match {
-              case GotoAST(line)          => s"GOTO $line"
-              case DimAST(name, dim)      => s"DIM $name[$dim]"
-              case EndAST()               => "END"
-              case NopAST()               => ""
-              case LetAST(variable, expr) => s"LET ${expression(variable)} = ${expression(expr)}"
-              case PrintAST(args) =>
-                s"PRINT ${args map { case (e, sep) => s"${expression(e)}${sep getOrElse ""}" } mkString " "}"
-            }
           val l = line.formatted(s"%${width}s")
+          val s = statement(stat)
 
           out.println(s"$l $s${if (comm.isDefined) comm.get else ""}")
       }
@@ -105,20 +124,70 @@ class Interpreter(out: PrintStream = Console.out) {
   def run(from: Option[Int]): Unit = {
     loc = lines.iteratorFrom(from.getOrElse(1))
 
-    while (loc != null && loc.hasNext) {
-      loc.next() match {
-        case (_, l @ LineAST(_, stat, _)) => perform(stat)
+    try {
+      while (loc != null && loc.hasNext) {
+        loc.next() match {
+          case (_, l @ LineAST(line, stat, _)) =>
+            perform(line, stat)
+        }
       }
+    } catch {
+      case e: Exception =>
+        out.println
+        out.println(e.getMessage)
     }
   }
 
-  def perform(stat: StatementAST): Unit =
+  def evaln(expr: ExpressionAST): Double =
+    eval(expr) match {
+      case n: Double => n
+      case _         => problem(expr.pos, "expected a number")
+    }
+
+  def evalb(expr: ExpressionAST): Boolean =
+    eval(expr) match {
+      case b: Boolean => b
+      case _          => problem(expr.pos, "expected a boolean")
+    }
+
+  def perform(line: Int, stat: StatementAST): Unit =
     stat match {
+      case ForAST(index, from, to, step) =>
+        val cell = assignable(index)
+
+        cell.value = evaln(from)
+        cell.loop = Some(LoopControl(line + 1, evaln(to), step.map(evaln).getOrElse(1)))
+      case NextAST(index) =>
+        access(index) match {
+          case None => problem(index.pos, "variable doesn't exist")
+          case Some(cell) =>
+            if (cell.loop.isEmpty)
+              problem(index.pos, "not a for loop index variable")
+            else {
+              val LoopControl(line, limit, step) = cell.loop.get
+
+              cell.value match {
+                case d: Double =>
+                  val res = d + step
+
+                  cell.value = res
+
+                  if (step > 0) {
+                    if (res <= limit)
+                      goto(line)
+                  } else {
+                    if (res >= limit)
+                      goto(line)
+                  }
+                case v => problem(index.pos, s"loop index variable doesn't contain a number: $v")
+              }
+            }
+        }
       case d @ DimAST(name, dim) =>
         vars get name match {
           case Some(_)          => problem(d.pos, s"array '$name' can't be dimensioned")
           case None if dim <= 0 => problem(d.pos, s"dimension must be positive")
-          case None             => vars(name) = Dim(Array.fill(dim)(new Cell(0)))
+          case None             => vars(name) = Dim(Array.fill(dim)(new Cell(0, None)))
         }
       case NopAST() | RemAST(_) =>
       case PrintAST(args) =>
@@ -127,9 +196,13 @@ class Interpreter(out: PrintStream = Console.out) {
           case (expr, None | Some(_)) => out.println(show(expr))
         }
       case LetAST(v: VariableAST, expr) => assignable(v).value = eval(expr)
-      case GotoAST(line)                => loc = lines.iteratorFrom(line)
+      case GotoAST(line)                => goto(line)
       case EndAST()                     => loc = null
+      case IfAST(cond, thenPart, elsePart) =>
+        if (evalb(cond)) perform(line, thenPart) else if (elsePart.isDefined) perform(line, elsePart.get)
     }
+
+  def goto(line: Int): Unit = loc = lines.iteratorFrom(line)
 
   def index(v: VariableAST): Option[Double] =
     v.sub.map(eval) match {
@@ -156,7 +229,7 @@ class Interpreter(out: PrintStream = Console.out) {
   def assignable(v: VariableAST): Cell =
     access(v) match {
       case None =>
-        val cell = new Cell(null)
+        val cell = new Cell(null, None)
 
         vars(v.name) = cell
         cell
@@ -186,30 +259,14 @@ class Interpreter(out: PrintStream = Console.out) {
           case ("NOT", a: Boolean) => !a
           case (o, v)              => problem(u.pos, s"invalid operation: '$o $v'")
         }
-      case InfixAST(left, _, "AND", right) =>
-        eval(left) match {
-          case l: Boolean if !l => false
-          case _: Boolean =>
-            eval(right) match {
-              case r: Boolean => r
-              case _          => problem(right.pos, "expected boolean")
-            }
-          case _ => problem(left.pos, "expected boolean")
-        }
-      case InfixAST(left, _, "OR", right) =>
-        eval(left) match {
-          case l: Boolean if l => true
-          case _: Boolean =>
-            eval(right) match {
-              case r: Boolean => r
-              case _          => problem(right.pos, "expected boolean")
-            }
-          case _ => problem(left.pos, "expected boolean")
-        }
+      case InfixAST(left, _, "AND", right) => if (!evalb(left)) false else evalb(right)
+      case InfixAST(left, _, "OR", right)  => if (evalb(left)) true else evalb(right)
       case InfixAST(left, oppos, op, right) =>
         (eval(left), op, eval(right)) match {
           case (a: Double, "+", b: Double) => a + b
           case (l, "+", r)                 => problem(oppos, s"can't add '$l' and '$r'")
+          case (a: Double, "-", b: Double) => a - b
+          case (l, "-", r)                 => problem(oppos, s"can't subtract '$r' from '$l'")
           case (a: Double, "*", b: Double) => a * b
           case (l, "*", r)                 => problem(oppos, s"can't multiply '$l' and '$r'")
           case (l: Double, "<", r: Double) => l < r
@@ -217,6 +274,7 @@ class Interpreter(out: PrintStream = Console.out) {
           case (l: Double, ">", r: Double) => l > r
           case (l: String, ">", r: String) => l > r
           case (l, "<" | ">", r)           => problem(oppos, s"can't compare '$l' and '$r'")
+          case (l, "=", r)                 => l == r
           case _                           => problem(oppos, s"invalid operation")
         }
       case f @ FunctionAST(name, args) =>
@@ -226,7 +284,9 @@ class Interpreter(out: PrintStream = Console.out) {
         }
     }
 
-  class Cell(var value: Any)
+  case class LoopControl(line: Int, limit: Double, step: Double)
+
+  class Cell(var value: Any, var loop: Option[LoopControl])
 
   case class Constant(value: Any)
 

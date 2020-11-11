@@ -50,12 +50,19 @@ class BasicParser extends RegexParsers {
 
   def statement: Parser[StatementAST] =
     positioned(
-//      kw("if") ~ expression ~ kw("then") ~ statement ~ opt(kw("else") ~> statement) ^^ {
-//        case _ ~ c ~ _ ~ y ~ n =>
-//      }
-      kw("dim") ~> (ident ~ ("[" ~> integer <~ "]")) ^^ {
-        case n ~ d => DimAST(n, d)
+      kw("for") ~ variable ~ "=" ~ expression ~ kw("to") ~ expression ~ opt(kw("step") ~> expression) ^^ {
+        case _ ~ v ~ _ ~ f ~ _ ~ t ~ s => ForAST(v, f, t, s)
       } |
+        kw("next") ~ variable ^^ {
+          case _ ~ v => NextAST(v)
+        } |
+        kw("if") ~ expression ~ kw("then") ~ (statement | (integer ^^ GotoAST)) ~ opt(
+          kw("else") ~> (statement | (integer ^^ GotoAST))) ^^ {
+          case _ ~ c ~ _ ~ y ~ n => IfAST(c, y, n)
+        } |
+        kw("dim") ~> (ident ~ ("[" ~> integer <~ "]")) ^^ {
+          case n ~ d => DimAST(n, d)
+        } |
         kw("print") ~> rep(expression ~ opt(";" | ",") ^^ { case e ~ s => (e, s) }) ^^ PrintAST |
         opt(kw("let")) ~> (variable ~ "=" ~ expression) ^^ {
           case v ~ _ ~ e => LetAST(v, e)
