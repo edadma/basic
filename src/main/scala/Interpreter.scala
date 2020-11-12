@@ -11,13 +11,27 @@ class Interpreter(out: PrintStream = Console.out) {
   private val vars = mutable.HashMap.empty[String, Any]
   private var loc = Iterator.empty[(Int, LineAST)]
   private val precedences =
-    Map("AND" -> 1, "OR" -> 2, "<" -> 10, ">" -> 10, "=" -> 10, "+" -> 20, "-" -> 20, "*" -> 30, "/" -> 30)
+    Map("AND" -> 1,
+        "OR" -> 2,
+        "<=" -> 10,
+        ">=" -> 10,
+        "<>" -> 10,
+        "<" -> 10,
+        ">" -> 10,
+        "=" -> 10,
+        "+" -> 20,
+        "-" -> 20,
+        "*" -> 30,
+        "/" -> 30)
   private val spaces =
     Map("AND" -> true,
         "OR" -> true,
         "<" -> true,
         ">" -> true,
         "=" -> true,
+        "<=" -> true,
+        ">=" -> true,
+        "<>" -> true,
         "+" -> true,
         "-" -> true,
         "*" -> false,
