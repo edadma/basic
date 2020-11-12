@@ -4,14 +4,6 @@ import scala.util.matching.Regex
 import scala.util.parsing.combinator.RegexParsers
 import scala.util.parsing.input.{CharSequenceReader, Position, Positional}
 
-object BasicParser {
-
-  def parseProgram(line: String, parser: BasicParser): List[LineAST] = {
-    parser.parseFromString(line, parser.program)
-  }
-
-}
-
 class BasicParser extends RegexParsers {
 
   override protected val whiteSpace: Regex = """[ \t\r]+""".r
@@ -121,4 +113,7 @@ class BasicParser extends RegexParsers {
       case Success(tree, _)       => tree
       case NoSuccess(error, rest) => problem(rest.pos, error)
     }
+
+  def parseProgram(code: String): List[LineAST] = parseFromString(code, program)
+
 }

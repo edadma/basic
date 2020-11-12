@@ -3,6 +3,7 @@ package xyz.hyperreal.basic
 import java.io.PrintStream
 
 import scala.swing._
+import scala.util.Using
 
 object Main extends App {
 
@@ -38,17 +39,14 @@ object Main extends App {
     }
   }
 
-  val program =
-    """100 FOR I = 1 TO 3
-      |110   PRINT "I = "; I
-      |120 NEXT I
-      |130 END
-      |""".stripMargin
-  val parser = new BasicParser
-  val interp = new Interpreter(UI.out)
-  val ast = BasicParser.parseProgram(program, parser)
+  var interp: Interpreter = _
 
-  interp.load(ast)
+  load("")
+
+  def load(code: String): Unit = {
+    interp = new Interpreter(UI.out)
+    interp.load(new BasicParser().parseProgram(code))
+  }
 
   UI.title = "Tiny Basic"
   UI.out.print(s"""Welcome to Tiny Basic v0.1.0
@@ -57,20 +55,26 @@ object Main extends App {
                   |] """.stripMargin)
   UI.visible = true
   UI.command = c => {
-    c.trim.toUpperCase match {
-      case "" =>
+    val a = c.trim.split("\\s+")
+
+    a(0) = a(0).toUpperCase
+
+    a.toList match {
+      case List("") => UI.out.print("\n Ok\n] ")
+      case List("LOAD", file) =>
+        load(Using(io.Source.fromFile(file))(_.mkString).get)
         UI.out.print("\n Ok\n] ")
-      case "LIST" =>
+      case List("LIST") =>
         interp.list(None, None)
         UI.out.print("\n Ok\n] ")
-      case "RUN" =>
+      case List("RUN") =>
         new Thread {
           override def run(): Unit = {
             interp.run(None)
             UI.out.print("\n Ok\n] ")
           }
         }.start()
-      case com =>
+      case com :: _ =>
         UI.out.println(s"unrecognized command: $com")
         UI.out.print("\n] ")
     }
