@@ -4,15 +4,17 @@ import scala.util.parsing.input.{Position, Positional}
 
 abstract class BasicAST extends Positional
 
-case class LineAST(line: Int, stat: StatementAST, comment: Option[String]) extends BasicAST
+case class LineAST(line: Int, stat: List[StatementAST], comment: Option[String]) extends BasicAST
+
+case class IntegerAST(v: Int) extends BasicAST
 
 abstract class StatementAST extends BasicAST { val comment: Option[String] = None }
-case class DimAST(name: String, dim: Int) extends StatementAST
+case class DimAST(name: String, dim: IntegerAST) extends StatementAST
 case class PrintAST(args: List[(ExpressionAST, Option[String])]) extends StatementAST
 case class InputAST(prompt: StringAST, vars: List[String]) extends StatementAST
 case class RemAST(rem: String) extends StatementAST
 case class LetAST(name: VariableAST, expr: ExpressionAST) extends StatementAST
-case class GotoAST(line: Int) extends StatementAST
+case class GotoAST(line: IntegerAST) extends StatementAST
 case class IfAST(cond: ExpressionAST, thenPart: StatementAST, elsePart: Option[StatementAST]) extends StatementAST
 case class ForAST(index: VariableAST, from: ExpressionAST, to: ExpressionAST, step: Option[ExpressionAST])
     extends StatementAST

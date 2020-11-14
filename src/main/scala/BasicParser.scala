@@ -12,7 +12,7 @@ class BasicParser extends RegexParsers {
     _.pos
   }
 
-  def integer: Parser[Int] = """\d+""".r ^^ (s => s.toInt)
+  def integer: Parser[IntegerAST] = positioned("""\d+""".r ^^ (s => IntegerAST(s.toInt)))
 
   def number: Parser[NumberAST] =
     positioned("""-?\d+(\.\d*)?""".r ^^ (s => NumberAST(s.toDouble)))
@@ -34,8 +34,8 @@ class BasicParser extends RegexParsers {
   def program: Parser[List[LineAST]] = opt("""\s+""" r) ~> repsep(programLine, """\s+""" r) <~ opt("""\s+""" r)
 
   def programLine: Parser[LineAST] =
-    positioned(integer ~ statement ~ opt("'.*" r) ^^ {
-      case l ~ s ~ c => LineAST(l, s, c)
+    positioned(integer ~ repsep(statement, ":") ~ opt("'.*" r) ^^ {
+      case l ~ s ~ c => LineAST(l.v, s, c)
     })
 
   def kw(s: String): Regex = s"(${s.toLowerCase}|${s.toUpperCase})\\b".r

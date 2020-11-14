@@ -2,14 +2,16 @@ package xyz.hyperreal.basic
 
 import java.io.PrintStream
 
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 import math._
+import scala.collection.immutable.{ArraySeq, SortedMap}
 
 class Interpreter(out: PrintStream = Console.out) {
 
   private val lines = mutable.SortedMap.empty[Int, LineAST]
+  private var runlines = immutable.SortedMap.empty[Int, Int]
   private val vars = mutable.HashMap.empty[String, Any]
-  private var loc = Iterator.empty[(Int, LineAST)]
+  private var loc = 0
   private val precedences =
     Map("AND" -> 1,
         "OR" -> 2,
@@ -67,7 +69,7 @@ class Interpreter(out: PrintStream = Console.out) {
     line match {
       case l @ LineAST(0, _, _) => problem(l.pos, "zero is not a valid line number")
       case l @ LineAST(n, _, _) =>
-        if (lines contains n) problem(l.pos, s"line number $n has already been encountered")
+        if (lines contains n) problem(l.pos, s"line number $n already exists")
         else lines(n) = line
     }
 
@@ -127,9 +129,9 @@ class Interpreter(out: PrintStream = Console.out) {
       val width = range.lastKey.toString.length
 
       range foreach {
-        case (line, LineAST(_, stat, comm)) =>
+        case (line, LineAST(_, stats, comm)) =>
           val l = line.formatted(s"%${width}s")
-          val s = statement(stat)
+          val s = stats map statement mkString ":"
 
           out.println(s"$l $s${if (comm.isDefined) comm.get else ""}")
       }
@@ -137,18 +139,30 @@ class Interpreter(out: PrintStream = Console.out) {
   }
 
   def run(from: Option[Int]): Unit = {
-    loc = lines.iteratorFrom(from.getOrElse(1))
+    var counter = 0
+
+    runlines = (for ((l, LineAST(_, stats, _)) <- lines.rangeFrom(from.getOrElse(1)))
+      yield {
+        val res = counter
+
+        counter += stats.length
+        (l, res)
+      }).to(SortedMap)
+
+    val snippet = lines.iteratorFrom(from.getOrElse(1)) flatMap {
+      case (_, LineAST(_, stats, _)) => stats
+    } to ArraySeq
 
     try {
-      while (loc != null && loc.hasNext) {
-        loc.next() match {
-          case (_, l @ LineAST(line, stat, _)) =>
-            perform(line, stat)
-        }
+      while (loc != -1 && loc < snippet.length) {
+        val stat = snippet(loc)
+
+        loc += 1
+        perform(stat)
       }
     } catch {
       case e: Exception =>
-        out.println
+        out.println()
         out.println(e.getMessage)
     }
   }
@@ -165,13 +179,13 @@ class Interpreter(out: PrintStream = Console.out) {
       case _          => problem(expr.pos, "expected a boolean")
     }
 
-  def perform(line: Int, stat: StatementAST): Unit =
+  def perform(stat: StatementAST): Unit =
     stat match {
-      case ForAST(index, from, to, step) =>
-        val cell = assignable(index)
+      case ForAST(variable, from, to, step) =>
+        val cell = assignable(variable)
 
         cell.value = evaln(from)
-        stack.push(ForControl(line + 1, evaln(to), step.map(evaln).getOrElse(1)))
+        stack.push(ForControl(loc, evaln(to), step.map(evaln).getOrElse(1)))
       case NextAST(index) =>
         access(index) match {
           case None => problem(index.pos, "variable doesn't exist")
@@ -179,7 +193,7 @@ class Interpreter(out: PrintStream = Console.out) {
             if (stack.isEmpty || !stack.top.isInstanceOf[ForControl])
               problem(index.pos, "not inside a for loop")
             else {
-              val ForControl(line, limit, step) = stack.top
+              val ForControl(stat, limit, step) = stack.top
 
               cell.value match {
                 case d: Double =>
@@ -189,12 +203,12 @@ class Interpreter(out: PrintStream = Console.out) {
 
                   if (step > 0) {
                     if (res <= limit)
-                      goto(line)
+                      loc = stat
                     else
                       stack.pop
                   } else {
                     if (res >= limit)
-                      goto(line)
+                      loc = stat
                     else
                       stack.pop
                   }
@@ -204,9 +218,9 @@ class Interpreter(out: PrintStream = Console.out) {
         }
       case d @ DimAST(name, dim) =>
         vars get name match {
-          case Some(_)          => problem(d.pos, s"array '$name' can't be dimensioned")
-          case None if dim <= 0 => problem(d.pos, s"dimension must be positive")
-          case None             => vars(name) = Dim(Array.fill(dim)(new Cell(0, None)))
+          case Some(_)            => problem(d.pos, s"array '$name' can't be dimensioned")
+          case None if dim.v <= 0 => problem(dim.pos, s"dimension must be positive")
+          case None               => vars(name) = Dim(Array.fill(dim.v)(new Cell(0, None)))
         }
       case NopAST() | RemAST(_) =>
       case PrintAST(args) =>
@@ -215,13 +229,11 @@ class Interpreter(out: PrintStream = Console.out) {
           case (expr, None | Some(_)) => out.println(show(expr))
         }
       case LetAST(v: VariableAST, expr) => assignable(v).value = eval(expr)
-      case GotoAST(line)                => goto(line)
-      case EndAST()                     => loc = null
+      case GotoAST(line)                => loc = runlines.iteratorFrom(line.v).nextOption.map(_._2).getOrElse(-1)
+      case EndAST()                     => loc = -1
       case IfAST(cond, thenPart, elsePart) =>
-        if (evalb(cond)) perform(line, thenPart) else if (elsePart.isDefined) perform(line, elsePart.get)
+        if (evalb(cond)) perform(thenPart) else if (elsePart.isDefined) perform(elsePart.get)
     }
-
-  def goto(line: Int): Unit = loc = lines.iteratorFrom(line)
 
   def index(v: VariableAST): Option[Double] =
     v.sub.map(eval) match {
