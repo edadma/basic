@@ -2,10 +2,13 @@ package xyz.hyperreal.basic
 
 import scala.util.Using
 
-class FNT(file: String) {
+class BitmapFont(file: String) {
 
   private val fnt =
     Using(new java.io.FileInputStream(file))(_.readAllBytes).getOrElse(sys.error("couldn't load FNT file"))
+
+  val width = 8
+  val height = 8
 
   def lookup(char: Char): Vector[Seq[Boolean]] = {
     val ch = char.toInt

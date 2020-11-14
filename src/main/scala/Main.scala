@@ -7,10 +7,10 @@ import scala.util.Using
 
 object Main extends App {
 
-  val atariFont = new FNT("ATARI.FNT")
+  val atariFont = new BitmapFont("ATARI.FNT")
 
   object UI extends MainFrame {
-    val screen = new Screen(320, 192, new Color(0, 255, 0), new Color(0, 0, 0), atariFont)
+    val screen = new Screen(320, 192, 4, new Color(0, 255, 0), new Color(0, 0, 0), atariFont)
     val out = new PrintStream(screen.out)
     val linebuf = new StringBuilder
     var command: String => Unit = _ => ()
@@ -60,7 +60,7 @@ object Main extends App {
     a(0) = a(0).toUpperCase
 
     a.toList match {
-      case List("") => UI.out.print("\n Ok\n] ")
+      case List("") => UI.out.print("] ")
       case List("LOAD", file) =>
         load(Using(io.Source.fromFile(file))(_.mkString).get)
         UI.out.print("\n Ok\n] ")

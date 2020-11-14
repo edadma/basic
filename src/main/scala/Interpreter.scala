@@ -36,6 +36,7 @@ class Interpreter(out: PrintStream = Console.out) {
         "-" -> true,
         "*" -> false,
         "/" -> false)
+  private val stack = new mutable.Stack[Control]
 
   List[(String, Double => Double)](
     "SQR" -> sqrt,
@@ -170,15 +171,15 @@ class Interpreter(out: PrintStream = Console.out) {
         val cell = assignable(index)
 
         cell.value = evaln(from)
-        cell.loop = Some(LoopControl(line + 1, evaln(to), step.map(evaln).getOrElse(1)))
+        stack.push(ForControl(line + 1, evaln(to), step.map(evaln).getOrElse(1)))
       case NextAST(index) =>
         access(index) match {
           case None => problem(index.pos, "variable doesn't exist")
           case Some(cell) =>
-            if (cell.loop.isEmpty)
-              problem(index.pos, "not a for loop index variable")
+            if (stack.isEmpty || !stack.top.isInstanceOf[ForControl])
+              problem(index.pos, "not inside a for loop")
             else {
-              val LoopControl(line, limit, step) = cell.loop.get
+              val ForControl(line, limit, step) = stack.top
 
               cell.value match {
                 case d: Double =>
@@ -189,9 +190,13 @@ class Interpreter(out: PrintStream = Console.out) {
                   if (step > 0) {
                     if (res <= limit)
                       goto(line)
+                    else
+                      stack.pop
                   } else {
                     if (res >= limit)
                       goto(line)
+                    else
+                      stack.pop
                   }
                 case v => problem(index.pos, s"loop index variable doesn't contain a number: $v")
               }
@@ -298,9 +303,10 @@ class Interpreter(out: PrintStream = Console.out) {
         }
     }
 
-  case class LoopControl(line: Int, limit: Double, step: Double)
+  abstract class Control { val line: Int }
+  case class ForControl(line: Int, limit: Double, step: Double) extends Control
 
-  class Cell(var value: Any, var loop: Option[LoopControl])
+  class Cell(var value: Any)
 
   case class Constant(value: Any)
 

@@ -8,11 +8,9 @@ import scala.swing.event.{Event, KeyTyped}
 
 case class Keyboard(c: Char) extends Event
 
-class Screen(width: Int, height: Int, oncolor: Color, offcolor: Color, fnt: FNT) extends Panel {
-  private val PIXEL = 4
-  private val CHAR = 8
-  private val cwidth = width / 8
-  private val cheight = height / 8
+class Screen(width: Int, height: Int, pixel: Int, oncolor: Color, offcolor: Color, fnt: BitmapFont) extends Panel {
+  private val cwidth = width / fnt.width
+  private val cheight = height / fnt.height
   private val screen = Array.fill[Boolean](height, width)(false)
   private val text = Array.fill[Char](cheight, cwidth)(' ')
   private var showcursor = true
@@ -21,7 +19,7 @@ class Screen(width: Int, height: Int, oncolor: Color, offcolor: Color, fnt: FNT)
 
   focusable = true
   requestFocus
-  preferredSize = (width * PIXEL, height * PIXEL)
+  preferredSize = (width * pixel, height * pixel)
   background = offcolor
   listenTo(keys)
 
@@ -34,7 +32,7 @@ class Screen(width: Int, height: Int, oncolor: Color, offcolor: Color, fnt: FNT)
   override def paintComponent(g: Graphics2D): Unit = {
     def paintPixel(x: Int, y: Int, on: Boolean): Unit = {
       g.setColor(if (on) oncolor else offcolor)
-      g.fillRect(x * PIXEL, y * PIXEL, PIXEL - 1, PIXEL - 1)
+      g.fillRect(x * pixel, y * pixel, pixel - 1, pixel - 1)
     }
 
     super.paintComponent(g)
@@ -43,10 +41,10 @@ class Screen(width: Int, height: Int, oncolor: Color, offcolor: Color, fnt: FNT)
       paintPixel(i, j, screen(j)(i))
 
     if (showcursor) {
-      val x = cx * CHAR
-      val y = cy * CHAR
+      val x = cx * fnt.width
+      val y = cy * fnt.height
 
-      for (i <- x until x + CHAR; j <- y until y + CHAR)
+      for (i <- x until x + fnt.width; j <- y until y + fnt.height)
         paintPixel(i, j, !screen(j)(i))
     }
   }
@@ -59,10 +57,10 @@ class Screen(width: Int, height: Int, oncolor: Color, offcolor: Color, fnt: FNT)
   def cursonOn: Boolean = showcursor
 
   def linefeedNoRepaint(): Unit = {
-    Array.copy(screen, CHAR, screen, 0, height - CHAR)
+    Array.copy(screen, fnt.height, screen, 0, height - fnt.height)
 
-    for (i <- 0 until CHAR)
-      screen(height - CHAR + i) = Array.fill[Boolean](width)(false)
+    for (i <- 0 until fnt.height)
+      screen(height - fnt.height + i) = Array.fill[Boolean](width)(false)
 
     Array.copy(text, 1, text, 0, cheight - 1)
     text(cheight - 1) = Array.fill[Char](cwidth)(' ')
@@ -144,7 +142,7 @@ class Screen(width: Int, height: Int, oncolor: Color, offcolor: Color, fnt: FNT)
     require(0 <= y && y <= height, s"y out of range: $y")
 
     drawPixelNoRepaint(x, y, on)
-    repaint(new Rectangle(x * PIXEL, y * PIXEL, PIXEL, PIXEL))
+    repaint(new Rectangle(x * pixel, y * pixel, pixel, pixel))
   }
 
   def drawChar(x: Int, y: Int, c: Char): Unit = {
@@ -154,8 +152,8 @@ class Screen(width: Int, height: Int, oncolor: Color, offcolor: Color, fnt: FNT)
     val bitmap = fnt.lookup(c)
 
     for (i <- 0 until 8; j <- 0 until 8)
-      drawPixelNoRepaint(x * CHAR + i, y * CHAR + j, bitmap(j)(i))
+      drawPixelNoRepaint(x * fnt.width + i, y * fnt.height + j, bitmap(j)(i))
 
-    repaint(new Rectangle(x * PIXEL * CHAR, y * PIXEL * CHAR, PIXEL * CHAR, PIXEL * CHAR))
+    repaint(new Rectangle(x * pixel * fnt.width, y * pixel * fnt.height, pixel * fnt.width, pixel * fnt.height))
   }
 }
