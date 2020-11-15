@@ -9,7 +9,7 @@ import scala.swing.event.{Event, KeyTyped}
 case class Keyboard(c: Char) extends Event
 
 class Screen(width: Int, height: Int, pixel: Int, oncolor: Color, offcolor: Color, fnt: BitmapFont) extends Panel {
-  private val cwidth = width / fnt.width
+  private val cwidth = width / 8
   private val cheight = height / fnt.height
   private val screen = Array.fill[Boolean](height, width)(false)
   private val text = Array.fill[Char](cheight, cwidth)(' ')
@@ -41,10 +41,10 @@ class Screen(width: Int, height: Int, pixel: Int, oncolor: Color, offcolor: Colo
       paintPixel(i, j, screen(j)(i))
 
     if (showcursor) {
-      val x = cx * fnt.width
+      val x = cx * 8
       val y = cy * fnt.height
 
-      for (i <- x until x + fnt.width; j <- y until y + fnt.height)
+      for (i <- x until x + 8; j <- y until y + fnt.ascent)
         paintPixel(i, j, !screen(j)(i))
     }
   }
@@ -151,9 +151,9 @@ class Screen(width: Int, height: Int, pixel: Int, oncolor: Color, offcolor: Colo
 
     val bitmap = fnt.lookup(c)
 
-    for (i <- 0 until 8; j <- 0 until 8)
-      drawPixelNoRepaint(x * fnt.width + i, y * fnt.height + j, bitmap(j)(i))
+    for (i <- 0 until 8; j <- 0 until fnt.height)
+      drawPixelNoRepaint(x * 8 + i, y * fnt.height + j, bitmap(j)(i))
 
-    repaint(new Rectangle(x * pixel * fnt.width, y * pixel * fnt.height, pixel * fnt.width, pixel * fnt.height))
+    repaint(new Rectangle(x * pixel * 8, y * pixel * fnt.height, pixel * 8, pixel * fnt.height))
   }
 }

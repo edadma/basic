@@ -7,10 +7,10 @@ import scala.util.Using
 
 object Main extends App {
 
-  val atariFont = new BitmapFont("ATARI.FNT")
+  val vdm1Font = new BitmapFont(VDM1.font)
 
   object UI extends MainFrame {
-    val screen = new Screen(320, 192, 4, new Color(0, 255, 0), new Color(0, 0, 0), atariFont)
+    val screen = new Screen(512, 192, 4, new Color(0, 255, 0), new Color(0, 0, 0), vdm1Font)
     val out = new PrintStream(screen.out)
     val linebuf = new StringBuilder
     var command: String => Unit = _ => ()
